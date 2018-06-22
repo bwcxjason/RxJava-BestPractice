@@ -3,8 +3,6 @@ package com.example.jason.rxjava_bestpractice.gettingstarted;
 
 import android.annotation.SuppressLint;
 
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -17,11 +15,15 @@ import io.reactivex.ObservableOnSubscribe;
 import io.reactivex.ObservableSource;
 import io.reactivex.Observer;
 import io.reactivex.disposables.Disposable;
+import io.reactivex.functions.Action;
 import io.reactivex.functions.BiConsumer;
 import io.reactivex.functions.BiFunction;
+import io.reactivex.functions.BooleanSupplier;
 import io.reactivex.functions.Consumer;
 import io.reactivex.functions.Function;
+import io.reactivex.functions.Predicate;
 import io.reactivex.observables.GroupedObservable;
+import io.reactivex.schedulers.Schedulers;
 
 public class HelloWorld {
 
@@ -913,6 +915,435 @@ public class HelloWorld {
     }
 
 
+    @SuppressLint("CheckResult")
+    private static void doOnEach() {
+        Observable
+                .create(new ObservableOnSubscribe<String>() {
+                    @Override
+                    public void subscribe(ObservableEmitter<String> emitter) throws Exception {
+                        emitter.onNext("hello");
+                        emitter.onNext("world");
+                        emitter.onComplete();
+                    }
+                })
+                .doOnEach(integerNotification -> System.out.println("doOnEach:" + integerNotification.getValue()))
+                .subscribe(System.out::println);
+    }
+
+    @SuppressLint("CheckResult")
+    private static void doOnNext() {
+        Observable
+                .create(new ObservableOnSubscribe<String>() {
+                    @Override
+                    public void subscribe(ObservableEmitter<String> emitter) throws Exception {
+                        emitter.onNext("hello");
+                        emitter.onNext("world");
+                        emitter.onComplete();
+                    }
+                })
+                .doOnNext(s -> System.out.println("doOnNext:" + s))
+                .subscribe(System.out::println);
+    }
+
+
+    private static void doOnLifecycle() {
+        Observable
+                .create(new ObservableOnSubscribe<String>() {
+                    @Override
+                    public void subscribe(ObservableEmitter<String> emitter) throws Exception {
+                        emitter.onNext("hello");
+                        emitter.onNext("world");
+                        emitter.onComplete();
+                    }
+                })
+                .doOnLifecycle(new Consumer<Disposable>() {
+                    @Override
+                    public void accept(Disposable disposable) throws Exception {
+                        System.out.println("doOnLifecycle accept");
+                    }
+                }, new Action() {
+                    @Override
+                    public void run() throws Exception {
+                        System.out.println("doOnLifecycle action");
+                    }
+                })
+                .doOnDispose(new Action() {
+                    @Override
+                    public void run() throws Exception {
+                        System.out.println("doOnDispose action");
+                    }
+                })
+                .subscribe(new Observer<String>() {
+                    private Disposable d;
+
+                    @Override
+                    public void onSubscribe(Disposable d) {
+                        System.out.println("onSubscribe");
+                        this.d = d;
+                    }
+
+                    @Override
+                    public void onNext(String s) {
+                        System.out.println("onNext:" + s);
+                    }
+
+                    @Override
+                    public void onError(Throwable e) {
+                        System.out.println("onError");
+                    }
+
+                    @Override
+                    public void onComplete() {
+                        System.out.println("onComplete");
+                    }
+                });
+    }
+
+    private static int j = 0;
+
+    private static void retryUntil() {
+        Observable
+                .create(new ObservableOnSubscribe<Integer>() {
+                    @Override
+                    public void subscribe(ObservableEmitter<Integer> emitter) throws Exception {
+                        emitter.onNext(1);
+                        emitter.onNext(2);
+                        emitter.onNext(3);
+                        emitter.onError(new Exception("404"));
+                    }
+                })
+                .retryUntil(new BooleanSupplier() {
+                    @Override
+                    public boolean getAsBoolean() throws Exception {
+                        if (j > 10) {
+                            return true;
+                        }
+                        return false;
+                    }
+                })
+                .subscribe(new Observer<Integer>() {
+                    @Override
+                    public void onSubscribe(Disposable d) {
+                        System.out.println("onSubscribe");
+                    }
+
+                    @Override
+                    public void onNext(Integer integer) {
+                        j += integer;
+                        System.out.println("onNext:" + integer);
+                    }
+
+                    @Override
+                    public void onError(Throwable e) {
+                        System.out.println("onError");
+                    }
+
+                    @Override
+                    public void onComplete() {
+                        System.out.println("onComplete");
+                    }
+                });
+    }
+
+
+    private static void retryWhen() {
+        Observable
+                .create(new ObservableOnSubscribe<String>() {
+                    @Override
+                    public void subscribe(ObservableEmitter<String> emitter) throws Exception {
+                        emitter.onNext("hello");
+                        emitter.onNext("world");
+                        emitter.onNext("my");
+                        emitter.onError(new Exception("fatal"));
+                        emitter.onNext("dear");
+                    }
+                })
+                .retryWhen(new Function<Observable<Throwable>, ObservableSource<?>>() {
+                    @Override
+                    public ObservableSource<?> apply(Observable<Throwable> throwableObservable) throws Exception {
+                        return throwableObservable.flatMap(new Function<Throwable, ObservableSource<?>>() {
+                            @Override
+                            public ObservableSource<?> apply(Throwable throwable) throws Exception {
+                                if (!"java.lang.Exception: fatal".equals(throwable.toString())) {
+                                    return Observable.just("可以忽略的异常");
+                                } else {
+                                    return Observable.error(new Throwable("终止啦"));
+                                }
+                            }
+                        });
+                    }
+                })
+                .subscribe(new Observer<String>() {
+                    @Override
+                    public void onSubscribe(Disposable d) {
+                        System.out.println("onSubscribe");
+                    }
+
+                    @Override
+                    public void onNext(String s) {
+                        System.out.println("onNext:" + s);
+                    }
+
+                    @Override
+                    public void onError(Throwable e) {
+                        System.out.println("onError" + e.toString());
+                    }
+
+                    @Override
+                    public void onComplete() {
+                        System.out.println("onComplete");
+                    }
+                });
+    }
+
+    private static void subscribeOn() {
+        Observable
+                .create(new ObservableOnSubscribe<Integer>() {
+                    @Override
+                    public void subscribe(ObservableEmitter<Integer> emitter) throws Exception {
+                        System.out.println("currentThread name: " + Thread.currentThread().getName());
+                        emitter.onNext(1);
+                        emitter.onNext(2);
+                        emitter.onNext(3);
+                        emitter.onComplete();
+                    }
+                })
+                .subscribeOn(Schedulers.newThread())
+                .subscribe(new Observer<Integer>() {
+                    @Override
+                    public void onSubscribe(Disposable d) {
+                        System.out.println("onSubscribe");
+                    }
+
+                    @Override
+                    public void onNext(Integer integer) {
+                        System.out.println("onNext: " + integer);
+                    }
+
+                    @Override
+                    public void onError(Throwable e) {
+                        System.out.println("onError");
+                    }
+
+                    @Override
+                    public void onComplete() {
+                        System.out.println("onComplete");
+                    }
+                });
+    }
+
+    private static void observeOn() {
+        Observable
+                .just(1, 2, 3)
+                //.observeOn(Schedulers.newThread())
+                .flatMap(new Function<Integer, ObservableSource<String>>() {
+                    @Override
+                    public ObservableSource<String> apply(Integer integer) throws Exception {
+                        System.out.println("flatMap Thread name: " + Thread.currentThread().getName());
+                        return Observable.just("hello: " + integer);
+                    }
+                })
+                //.observeOn(AndroidSchedulers.mainThread())
+                .subscribe(new Observer<String>() {
+                    @Override
+                    public void onSubscribe(Disposable d) {
+                        System.out.println("onSubscribe");
+                    }
+
+                    @Override
+                    public void onNext(String s) {
+                        System.out.println("onNext Thread name: " + Thread.currentThread().getName());
+                        System.out.println("onNext: " + s);
+                    }
+
+                    @Override
+                    public void onError(Throwable e) {
+                        System.out.println("onError");
+                    }
+
+                    @Override
+                    public void onComplete() {
+                        System.out.println("onComplete");
+                    }
+                });
+    }
+
+    private static void filter() {
+        Observable
+                .just(1, 2, 3)
+                .filter(new Predicate<Integer>() {
+                    @Override
+                    public boolean test(Integer integer) throws Exception {
+                        return integer > 2;
+                    }
+                })
+                .subscribe(new Observer<Integer>() {
+                    @Override
+                    public void onSubscribe(Disposable d) {
+                        System.out.println("onSubscribe");
+                    }
+
+                    @Override
+                    public void onNext(Integer integer) {
+                        System.out.println("onNext: " + integer);
+                    }
+
+                    @Override
+                    public void onError(Throwable e) {
+                        System.out.println("onError");
+                    }
+
+                    @Override
+                    public void onComplete() {
+                        System.out.println("onComplete");
+                    }
+                });
+    }
+
+    @SuppressLint("CheckResult")
+    private static void ofType() {
+        Observable
+                .just(1, 2, 3, "hello", "world")
+                .ofType(Integer.class)
+                .subscribe(System.out::println);
+    }
+
+    @SuppressLint("CheckResult")
+    private static void skip() {
+        Observable
+                .just(1, 2, 3, 4, 5, 6, 7, 8)
+                .skip(2)
+                .subscribe(System.out::println);
+    }
+
+    @SuppressLint("CheckResult")
+    private static void distinct() {
+        Observable
+                .just(1, 2, 3, 3, 2, 1)
+                .distinct()
+                .subscribe(System.out::println);
+    }
+
+    @SuppressLint("CheckResult")
+    private static void distinctUntilChanged() {
+        Observable
+                .just(1, 2, 3, 3, 3, 3, 2, 1)
+                .distinctUntilChanged()
+                .subscribe(System.out::println);
+    }
+
+    @SuppressLint("CheckResult")
+    private static void take() {
+        Observable
+                .just(1, 2, 3, 4, 5)
+                .take(3)
+                .subscribe(System.out::println);
+    }
+
+    @SuppressLint("CheckResult")
+    private static void debounce() {
+        Observable
+                .create(new ObservableOnSubscribe<Integer>() {
+                    @Override
+                    public void subscribe(ObservableEmitter<Integer> emitter) throws Exception {
+                        emitter.onNext(1);
+                        Thread.sleep(1000);
+                        emitter.onNext(2);
+                        Thread.sleep(1000);
+                        emitter.onNext(3);
+                    }
+                })
+                .debounce(900, TimeUnit.MILLISECONDS)
+                .subscribe(System.out::println);
+    }
+
+    @SuppressLint("CheckResult")
+    private static void elementAt() {
+        Observable
+                .just(1, 2, 3, 4)
+                .elementAt(2)
+                .subscribe(System.out::println);
+    }
+
+    @SuppressLint("CheckResult")
+    private static void elementAtOrError() {
+        Observable
+                .just(1, 2, 3, 4)
+                .elementAtOrError(5)
+                .subscribe(System.out::println);
+    }
+
+    @SuppressLint("CheckResult")
+    private static void all() {
+        Observable
+                .just(1, 2, 3, 4)
+                .all(new Predicate<Integer>() {
+                    @Override
+                    public boolean test(Integer integer) throws Exception {
+                        return integer > 0;
+                    }
+                })
+                .subscribe(System.out::println);
+    }
+
+    @SuppressLint("CheckResult")
+    private static void takeWhile() {
+        Observable
+                .just(1, 2, 3, 4)
+                .takeWhile(integer -> integer < 3)
+                .subscribe(System.out::println);
+    }
+
+    @SuppressLint("CheckResult")
+    private static void skipWhile() {
+        Observable
+                .just(1, 2, 3, 4, 5)
+                .skipWhile(integer -> integer < 3)
+                .subscribe(System.out::println);
+    }
+
+    @SuppressLint("CheckResult")
+    private static void skipUntil() {
+        Observable
+                .intervalRange(1, 5, 0, 1, TimeUnit.SECONDS)
+                .skipUntil(Observable.just(1).delay(1, TimeUnit.SECONDS))
+                .subscribe(System.out::println);
+    }
+
+    @SuppressLint("CheckResult")
+    private static void sequenceEqual() {
+        Observable
+                .sequenceEqual(Observable.just(1, 2, 3), Observable.just(1, 3, 2))
+                .subscribe(System.out::println);
+    }
+
+    @SuppressLint("CheckResult")
+    private static void contains() {
+        Observable
+                .just(1, 2, 3)
+                .contains(3)
+                .subscribe(System.out::println);
+    }
+
+    @SuppressLint("CheckResult")
+    private static void amb() {
+        List<Observable<Long>> list = new ArrayList<>();
+        list.add(Observable.intervalRange(1, 5, 2, 1, TimeUnit.SECONDS));
+        list.add(Observable.intervalRange(6, 5, 0, 1, TimeUnit.SECONDS));
+
+        Observable
+                .amb(list)
+                .subscribe(System.out::println);
+
+    }
+
+    @SuppressLint("CheckResult")
+    private static void defaultIfEmpty() {
+        Observable
+                .empty()
+                .defaultIfEmpty("hello world")
+                .subscribe(System.out::println);
+    }
 
     public static void main(String[] args) {
 //        Observable observable = createObservable();
@@ -970,7 +1401,57 @@ public class HelloWorld {
 
 //        count();
 
-        delay();
+//        delay();
+
+//        doOnEach();
+//        doOnNext();
+//        doAfterNext();
+//        doOnComplete();
+//        doOnError();
+//        doOnSubscribe();
+//        doOnDispose();
+//        doOnLifecycle();
+//        doOnTerminate();
+//        doAfterTerminate();
+//        doFinally();
+
+//        onErrorReturn(); // 当接受到一个 onError() 事件之后回调，返回的值会回调 onNext() 方法
+//        onErrorResumeNext(); // 当接收到 onError() 事件时，返回一个新的 Observable
+//        onExceptionResumeNext(); // 与 onErrorResumeNext() 作用基本一致，但是这个方法只能捕捉 Exception
+
+//        retry(); // 如果出现错误事件，则会重新发送所有事件序列。times 是代表重新发的次数
+//        retryUntil(); // 出现错误事件之后，可以通过此方法判断是否继续发送事件
+//        retryWhen(); // 当被观察者接收到异常或者错误事件时会回调该方法，这个方法会返回一个新的被观察者。
+                       // 如果返回的被观察者发送 Error 事件则之前的被观察者不会继续发送事件，
+                       // 如果发送正常事件则之前的被观察者会继续不断重试发送事件。
+
+//        repeat(); // 重复发送被观察者的事件，times 为发送次数
+//        repeatWhen(); // 如果新的被观察者返回 onComplete 或者 onError 事件，则旧的被观察者不会继续发送事件。
+                        // 如果被观察者返回其他事件，则会重复发送事件。
+//        subscribeOn(); // 指定被观察者的线程，要注意的时，如果多次调用此方法，只有第一次有效
+//        observeOn(); // 指定观察者的线程，每指定一次就会生效一次
+
+//        filter();
+//        ofType();
+//        skip(); // skipLast();
+//        distinct();
+//        distinctUntilChanged();
+//        take(); // 观察者取前几个事件; takeLast()：观察者取后几个事件;
+//        debounce(); // throttleWithTimeout：一样的用法
+//        firstElement(); // 取事件序列的第一个元素
+//        lastElement(); // 取事件序列的最后一个元素
+//        elementAt();
+//        elementAtOrError();
+
+//        all(); // 判断事件序列是否全部满足某个事件，如果都满足则返回 true，反之则返回 false
+//        takeWhile(); // 当某个数据满足条件时就会发送该数据，反之则不发送
+//        skipWhile();
+//        skipUntil();
+//        sequenceEqual();
+//        contains();
+//        isEmpty();
+//        amb();
+        defaultIfEmpty();
     }
 
 }
