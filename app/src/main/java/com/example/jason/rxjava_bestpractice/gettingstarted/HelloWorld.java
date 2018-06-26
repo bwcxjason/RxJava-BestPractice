@@ -1373,7 +1373,7 @@ public class HelloWorld {
 //        flatMap();
 //        concatMap();
 
-//        buffer();
+        buffer();
 
 //        groupBy();
 
@@ -1451,7 +1451,7 @@ public class HelloWorld {
 //        contains();
 //        isEmpty();
 //        amb();
-        defaultIfEmpty();
+//        defaultIfEmpty();
     }
 
 }
